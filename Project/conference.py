@@ -13,6 +13,7 @@ __author__ = 'veltheris@gmail.com (Dylan Mountain)'
 
 ### Basic Imports ###
 from datetime import datetime
+import time
 
 ### AppEngine Imports ###
 import endpoints
@@ -53,6 +54,7 @@ from models import QuerySessionBySpeaker
 from models import QuerySessionByDuration
 from models import QuerySessionByStartTime
 from models import SessionWebsafe
+from models import WishlistResponse
 from models import StringMessage
 
 ### Settings and Utilities ###
@@ -73,6 +75,14 @@ DEFAULTS = {
     "maxAttendees": 0,
     "seatsAvailable": 0,
     "topics": [ "Default", "Topic" ],
+}
+
+SESSION_DEFAULTS = {
+    "typeOfSession": ["Unspecified"],
+    "highlights": ["No Highlights"],
+    "speaker": ["No Speaker"],
+    "duration": 0,
+    "startTime": datetime.strptime("00:00", "%H:%M").time()
 }
 
 OPERATORS = {
@@ -101,6 +111,7 @@ MEMCACHE_FEATURED_KEY = "FeaturedKEY"
   ########################
 #### Endpoint Functions ###########################################################
   ########################
+
 
 @endpoints.api( name='conference',
                 version='v1',
@@ -480,7 +491,7 @@ class ConferenceApi(remote.Service):
         data['conferenceId'] = conference_id.string_id()
         # convert dates from strings to Date objects; set month based on start_date
         if data['date']:
-            data['date'] = datetime.strptime(data['startDate'][:10], "%Y-%m-%d").date()
+            data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
         if data['startTime']:
             data['startTime'] = datetime.strptime(data['startTime'][:5], "%H:%M").time()
         # make Profile Key from user ID
@@ -491,11 +502,15 @@ class ConferenceApi(remote.Service):
         # make Conference key from ID
         s_key = ndb.Key(Session, s_id, parent=c_key)
         data['key'] = s_key
-        #data['parentConference'] = request.parentConference = conference_id
-        
-        # create Conference & return (modified) ConferenceForm
+        data['websafeKey'] = s_key.urlsafe()
+        for df in SESSION_DEFAULTS:
+            if data[df] in (None, []):
+                data[df] = SESSION_DEFAULTS[df]
+                if df != "startTime": setattr(request, df, SESSION_DEFAULTS[df])
+                else: setattr(request, df, str(SESSION_DEFAULTS[df]))
+        # create Session & return (modified) SessionForm
         Session(**data).put()
-        if data['speaker']:
+        if data['speaker'] and data['speaker'] != ["No Speaker"]:
             taskqueue.add(params={'websafeKey': c_key.urlsafe(),
                                   'speaker': data['speaker']},
                                   url='/tasks/checkSpeaker')
@@ -503,8 +518,9 @@ class ConferenceApi(remote.Service):
 
     #Backend process for adding or removing from wishlist.
     def _wishlistChange(self, request, add=True):
-        """Register or unregister user for selected conference."""
+        """Add or remove the session from the user's wishlist."""
         result = None
+        message = None
         profile = self._getProfileFromUser() # get user Profile
 
         # check if conf exists given websafeConfKey
@@ -512,17 +528,20 @@ class ConferenceApi(remote.Service):
         session_key = request.websafeKey
         session = ndb.Key(urlsafe=session_key).get()
         if not session:
-            raise endpoints.NotFoundException(
-                'There is no session with key: %s' % session_key)
-        # register
+            message = 'There is no session with key: %s' % (session_key)
+            result = False
+        logging.info(profile.sessionWishlist)
+        # add to wishlist
         if add:
             # See if the session is already on wishlist
             if session_key in profile.sessionWishlist:
-                raise ConflictException(
-                    "This session is on your wishlist already")
+                message = "This session is on your wishlist already"
+                result = False
             # add the session to the wishlist
-            profile.sessionWishlist.append(session_key)
-            result = "Session added to Wishlist"
+            else:
+                profile.sessionWishlist.append(session_key)
+                message = "Session added to Wishlist"
+                result = True
 
         # remove from wishlist
         else:
@@ -530,13 +549,15 @@ class ConferenceApi(remote.Service):
             if session_key in profile.sessionWishlist:
                 # remove the session from wishlist
                 profile.sessionWishlist.remove(session_key)
-                result = "Session removed from Wishlist"
+                message = "Session removed from Wishlist"
+                result = True
             else:
-                raise ConflictException("This session is not on your wishlist")
+                message = "This session is not on your wishlist"
+                result = False
 
         # write things back to the datastore & return
         profile.put()
-        return BooleanMessage(data=result)
+        return WishlistResponse(message=message,result=result)
         
 
 #-------------------------------### Methods - Basic ###------------------------------#
@@ -572,7 +593,7 @@ class ConferenceApi(remote.Service):
     def getConferenceSessionsByType(self, request):
         """websafeConferenceKey, typeOfSession -- Given a conference, return all sessions of a specified type (eg lecture, keynote, workshop)"""
         safe_key = getattr(request, "websafeConferenceKey")
-        speaker = getattr(request, "typeOfSession")
+        typeOfSession = getattr(request, "typeOfSession")
         conference_key = ndb.Key(urlsafe=safe_key)
         sessions = Session.query(ancestor=conference_key)
         sessions = sessions.filter(Session.typeOfSession==typeOfSession)
@@ -632,6 +653,8 @@ class ConferenceApi(remote.Service):
         safe_key = getattr(request, "websafeConferenceKey")
         startTime = getattr(request, "startTime")
         startTime = datetime.strptime(startTime[:5], "%H:%M").time()
+        # NDB TimeProperty objects are internally stored as datetime equivalents. Works fine usually, but for filtering it wants a datetime object. So turn starTime into one for filtering purposes
+        testTime = datetime.combine(datetime(1970,1,1), startTime)
         direction = getattr(request, "direction")
         conference_key = ndb.Key(urlsafe=safe_key)
         sessions = Session.query(ancestor=conference_key)
@@ -641,8 +664,9 @@ class ConferenceApi(remote.Service):
             operator = '>'
         else:
             operator = '<'
-        value = startTime
+        value = testTime
         queryFilter = ndb.query.FilterNode(field,operator,value)
+        logging.info(queryFilter)
         sessions = sessions.filter(queryFilter)
         sessions = sessions.order(Session.startTime)
         sessions = sessions.order(Session.name)
@@ -654,16 +678,16 @@ class ConferenceApi(remote.Service):
 #-------------------------------### Methods - Wishlist ###------------------------------#
 
     #Method to add to wishlist
-    @endpoints.method(SessionWebsafe, BooleanMessage,
-            path='session/wishlist/add/',
+    @endpoints.method(SessionWebsafe, WishlistResponse,
+            path='session/wishlist/add',
             http_method='GET', name='addSessionToWishlist')
     def addSessionToWishlist(self, request):
         """SessionKey -- adds the session to the user's list of sessions they are interested in attending."""
         return self._wishlistChange(request, add=True)
 
     #Method to remove from wishlist
-    @endpoints.method(SessionWebsafe, BooleanMessage,
-            path='session/wishlist/remove/',
+    @endpoints.method(SessionWebsafe, WishlistResponse,
+            path='session/wishlist/remove',
             http_method='GET', name='removeSessionFromWishlist')
     def removeSessionFromWishlist(self, request):
         """SessionKey -- adds the session to the user's list of sessions they are interested in attending."""
@@ -677,7 +701,12 @@ class ConferenceApi(remote.Service):
         """Get list of conferences that user has registered for."""
         profile = self._getProfileFromUser() # get user Profile
         safekeys = profile.sessionWishlist
+        if not safekeys:
+            raise endpoints.NotFoundException("There are no sessions on your wishlist.")
         keys = (ndb.Key(urlsafe=safekey) for safekey in safekeys)
+        logging.info(keys)
+        if not keys:
+            raise endpoints.NotFoundException("There are no sessions on your wishlist.")
         sessions = ndb.get_multi(keys)
         # return set of ConferenceForm objects per Conference
         return SessionForms(items=[self._formatSession(session) for session in sessions]

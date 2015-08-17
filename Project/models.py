@@ -60,6 +60,7 @@ class TeeShirtSize(messages.Enum):
     XXXL_M = 14
     XXXL_W = 15
 
+
 class Conference(ndb.Model):
     """Conference -- Conference object"""
     name            = ndb.StringProperty(required=True)
@@ -72,6 +73,7 @@ class Conference(ndb.Model):
     endDate         = ndb.DateProperty()
     maxAttendees    = ndb.IntegerProperty()
     seatsAvailable  = ndb.IntegerProperty()
+
 
 class ConferenceForm(messages.Message):
     """ConferenceForm -- Conference outbound form message"""
@@ -87,16 +89,19 @@ class ConferenceForm(messages.Message):
     endDate              = messages.StringField(10)
     websafeKey           = messages.StringField(11)
     organizerDisplayName = messages.StringField(12)
+
     
 class ConferenceForms(messages.Message):
     """ConferenceForms -- multiple Conference outbound form message"""
     items = messages.MessageField(ConferenceForm, 1, repeated=True)
+
 
 class ConferenceQueryForm(messages.Message):
     """ConferenceQueryForm -- Conference query inbound form message"""
     field = messages.StringField(1)
     operator = messages.StringField(2)
     value = messages.StringField(3)
+
 
 class ConferenceQueryForms(messages.Message):
     """ConferenceQueryForms -- multiple ConferenceQueryForm inbound form message"""
@@ -108,13 +113,16 @@ class BooleanMessage(messages.Message):
     """BooleanMessage-- outbound Boolean value message"""
     data = messages.BooleanField(1)
 
+
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
     http_status = httplib.CONFLICT
+
     
 ####################
 ## Session Models ##
 ####################
+
 
 class Session(ndb.Model):
     """Session -- Session object"""
@@ -128,6 +136,7 @@ class Session(ndb.Model):
     startTime       = ndb.TimeProperty()
     websafeKey      = ndb.StringProperty()
 
+
 class SessionForm(messages.Message):
     """Session -- Session object"""
     name                 = messages.StringField(1)
@@ -139,27 +148,33 @@ class SessionForm(messages.Message):
     startTime            = messages.StringField(7)
     websafeConferenceKey = messages.StringField(8)
     websafeKey           = messages.StringField(9)
+
     
 class SessionForms(messages.Message):
     """ConferenceForms -- multiple Conference outbound form message"""
     items = messages.MessageField(SessionForm, 1, repeated=True)
+
     
 class SessionWebsafe(messages.Message):
     """SessionWebsafe -- a key to find a session"""
     websafeKey          = messages.StringField(1)
 
+
 class QuerySessionByKey(messages.Message):
     """QuerySessionByKey -- Accepts a websafe conference key."""
     websafeConferenceKey    = messages.StringField(1)
+
     
 class QuerySessionByType(messages.Message):
     """QuerySessionByType -- Accepts a websafe conference key and a session type."""
     websafeConferenceKey    = messages.StringField(1)
     typeOfSession           = messages.StringField(2)
 
+
 class QuerySessionBySpeaker(messages.Message):
     """QuerySessionBySpeaker -- Accepts a speaker."""
     speaker    = messages.StringField(1)
+
 
 class QuerySessionByDuration(messages.Message):
     """QuerySessionByDuration -- Accepts a key, duration, and direction."""
@@ -167,11 +182,19 @@ class QuerySessionByDuration(messages.Message):
     duration                = messages.IntegerField(2)
     direction               = messages.BooleanField(3)
 
+
 class QuerySessionByStartTime(messages.Message):
     """QuerySessionByStartTime -- Accepts a key, startTime, and direction."""
     websafeConferenceKey    = messages.StringField(1)
     startTime               = messages.StringField(2)
     direction               = messages.BooleanField(3)
+
+
+class WishlistResponse(messages.Message):
+    """WishListResponse -- Returns a message and a exit code."""
+    message                 = messages.StringField(1)
+    result                = messages.BooleanField(2)
+
     
 class StringMessage(messages.Message):
     """StringMessage-- outbound (single) string message"""

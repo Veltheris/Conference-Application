@@ -140,6 +140,12 @@ One way around these issues at the cost of efficiency, is to only run one of the
 ##Changelog
 ###Version 1.0
 - First Submitted Version.
+###Version 1.1
+- Second Version
+- Fixed an issue with getSessionsByStartTime()
+- Added default values to session to clear some issues with SessionForms
+- Fixed path names that would result in a 404 when viewed through API Explorer
+- Wishlist adding and removing now returns a string as well as a Boolean value.
 
 ##Commenets
 This was a fun project, though AppEngine is a bit annoying to work with.

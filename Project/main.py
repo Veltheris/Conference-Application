@@ -9,12 +9,13 @@ import webapp2
 from google.appengine.api import app_identity
 from conference import ConferenceApi
 
+
 class CheckSpeaker(webapp2.RequestHandler):
     def post(self):
         """Check if speaker has multiple sessions, adding them as featured speaker if so."""
-        #websafeKey = getattr(self.request, "websafeKey")
+        # grab the key of the conference to check
         websafeKey = self.request.get('websafeKey')
-        #speaker = getattr(self.request, "speaker")
+        # grab the speaker to check if featured
         speaker = self.request.get('speaker')
         ConferenceApi._speakerCheck(websafeKey,speaker)        
 
