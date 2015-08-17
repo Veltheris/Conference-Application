@@ -138,8 +138,10 @@ The implementation of Not Equal to also causes a larger issue for the Query. One
 One way around these issues at the cost of efficiency, is to only run one of the filters and than manually check the results in the `For` loop. This would enable you to at least give the desired Sessions.
 
 ##Changelog
+
 ###Version 1.0
 - First Submitted Version.
+
 ###Version 1.1
 - Second Version
 - Fixed an issue with getSessionsByStartTime()
